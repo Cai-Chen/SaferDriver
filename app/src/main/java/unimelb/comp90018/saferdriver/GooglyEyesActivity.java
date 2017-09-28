@@ -16,7 +16,6 @@
 package unimelb.comp90018.saferdriver;
 
 import android.Manifest;
-import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Context;
@@ -29,15 +28,16 @@ import android.location.Address;
 import android.location.Geocoder;
 import android.location.Location;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ResultReceiver;
 import android.provider.Settings;
+import android.speech.tts.TextToSpeech;
 import android.support.annotation.NonNull;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
-import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
 import android.util.Log;
@@ -72,12 +72,18 @@ import unimelb.comp90018.saferdriver.ui.camera.CameraSourcePreview;
 import unimelb.comp90018.saferdriver.ui.camera.GraphicOverlay;
 import com.google.android.gms.vision.face.LargestFaceFocusingProcessor;
 
+import com.microsoft.windowsazure.mobileservices.MobileServiceClient;
+import com.microsoft.windowsazure.mobileservices.http.OkHttpClientFactory;
+import com.microsoft.windowsazure.mobileservices.table.MobileServiceTable;
+import com.squareup.okhttp.OkHttpClient;
+
 import java.io.IOException;
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Activity for Googly Eyes, an app that uses the camera to track faces and superimpose Googly Eyes
@@ -111,6 +117,10 @@ public final class GooglyEyesActivity extends AppCompatActivity {
     private GraphicOverlay mGraphicOverlay;
 
     private boolean mIsFrontFacing = true;
+
+    // TextToSpeech instance
+    private TextToSpeech tts;
+    private static String WARN_MESSAGE;
 
     private static AppCompatActivity instance;
 
@@ -205,7 +215,9 @@ public final class GooglyEyesActivity extends AppCompatActivity {
     /**
      * Receiver registered with this activity to get the response from FetchAddressIntentService.
      */
-    private AddressResultReceiver mResultReceiver;
+
+    private MobileServiceClient mClient;
+    private MobileServiceTable<RoadInfo> mToDoTable;
     //==============================================================================================
     // Activity Methods
     //==============================================================================================
@@ -227,6 +239,40 @@ public final class GooglyEyesActivity extends AppCompatActivity {
         final Button button = (Button) findViewById(R.id.flipButton);
         button.setOnClickListener(mFlipButtonListener);
 
+        tts = new TextToSpeech(GooglyEyesActivity.getContext(), new TextToSpeech.OnInitListener()
+        {
+            @Override
+            public void onInit(int status)
+            {
+                if(status != TextToSpeech.ERROR)
+                    tts.setLanguage(Locale.UK);
+            }
+        });
+
+        try {
+            // Create the Mobile Service Client instance, using the provided
+
+            // Mobile Service URL and key
+            mClient = new MobileServiceClient(
+                    "https://mobileassignment2.azurewebsites.net", this);
+
+            // Extend timeout from default of 10s to 20s
+            mClient.setAndroidHttpClientFactory(new OkHttpClientFactory() {
+                @Override
+                public OkHttpClient createOkHttpClient() {
+                    OkHttpClient client = new OkHttpClient();
+                    client.setReadTimeout(20, TimeUnit.SECONDS);
+                    client.setWriteTimeout(20, TimeUnit.SECONDS);
+                    return client;
+                }
+            });
+
+            mToDoTable = mClient.getTable(RoadInfo.class);
+
+        }  catch (Exception e){
+            Log.v("Exception", e.getMessage());
+        }
+
         //=========================================================================================
         mLastUpdateTime = "";
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
@@ -246,14 +292,12 @@ public final class GooglyEyesActivity extends AppCompatActivity {
         // permission is not granted yet, request permission.
         if (checkPermissions()) {
             createCameraSource();
-            startLocationUpdates();
             setButtonsEnabledState();
+            startLocationUpdates();
+
         } else {
             requestPermissions();
         }
-
-        //==========================================================================================
-
     }
 
 
@@ -614,26 +658,10 @@ public final class GooglyEyesActivity extends AppCompatActivity {
                 getAddress(mCurrentLocation);
                 mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
                 updateLocationUI();
-//                startIntentService(mCurrentLocation);
             }
         };
     }
 
-//    private void startIntentService(Location lastLocation) {
-//        // Create an intent for passing to the intent service responsible for fetching the address.
-//        Intent intent = new Intent(this, LocationUpdateIntentService.class);
-//
-//        // Pass the result receiver as an extra to the service.
-//        intent.putExtra(Constants.RECEIVER, mResultReceiver);
-//
-//        // Pass the location data as an extra to the service.
-//        intent.putExtra(Constants.LOCATION_DATA_EXTRA, lastLocation);
-//
-//        // Start the service. If the service isn't already running, it is instantiated and started
-//        // (creating a process for it if needed); if it is running then it remains running. The
-//        // service kills itself automatically once all intents are processed.
-//        startService(intent);
-//    }
 
     /**
      * Receiver for data sent from FetchAddressIntentService.
@@ -739,7 +767,17 @@ public final class GooglyEyesActivity extends AppCompatActivity {
      */
     private void updateLocationUI() {
         if (mCurrentLocation != null) {
-            System.out.println(mAddressOutput+mLastUpdateTime);
+//            query(mAddressOutput);
+            System.out.println(mAddressOutput);
+            String[] stringArray = mAddressOutput.split(",");
+            int length = stringArray.length;
+            String road = stringArray[0];
+            String zone = stringArray[length-2];
+            String[] zongArray = zone.split(" ");
+            String queryAddress = road+" "+zongArray[zongArray.length-1];
+            System.out.println(queryAddress);
+            query(queryAddress);
+
         }
     }
 
@@ -929,15 +967,6 @@ public final class GooglyEyesActivity extends AppCompatActivity {
             Address address = addresses.get(0);
             ArrayList<String> addressFragments = new ArrayList<>();
 
-            // Fetch the address lines using {@code getAddressLine},
-            // join them, and send them to the thread. The {@link android.location.address}
-            // class provides other options for fetching address details that you may prefer
-            // to use. Here are some examples:
-            // getLocality() ("Mountain View", for example)
-            // getAdminArea() ("CA", for example)
-            // getPostalCode() ("94043", for example)
-            // getCountryCode() ("US", for example)
-            // getCountryName() ("United States", for example)
             for(int i = 0; i <= address.getMaxAddressLineIndex(); i++) {
                 addressFragments.add(address.getAddressLine(i));
             }
@@ -945,5 +974,49 @@ public final class GooglyEyesActivity extends AppCompatActivity {
             return TextUtils.join(System.getProperty("line.separator"), addressFragments);
         }
     }
+
+
+    public void query(String roadName)
+    {
+        new RoadQueryTask().execute(roadName);
+    }
+
+    public class RoadQueryTask extends AsyncTask<String, Void, String>
+    {
+        @Override
+        protected String doInBackground(String... params)
+        {
+            String road = params[0];
+            List<RoadInfo> result = null;
+
+            try
+            {
+                result = mToDoTable
+                        .where()
+                        .field("road").eq(road)
+                        .execute()
+                        .get();
+            }
+            catch (Exception e)
+            {
+                e.printStackTrace();
+            }
+            if(result.size() == 0)
+                return null;
+            else
+                return result.get(0).getmDescription();
+        }
+
+        @Override
+        protected void onPostExecute(String s)
+        {
+            if (s!=null){
+                WARN_MESSAGE = s;
+                if(!tts.isSpeaking())
+                    tts.speak(WARN_MESSAGE, TextToSpeech.QUEUE_FLUSH, null, "warn");
+            }
+        }
+    }
+
 
 }
