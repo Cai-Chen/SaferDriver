@@ -24,8 +24,9 @@
             android:name="com.google.android.gms.vision.DEPENDENCIES"
             android:value="face"/>
 
+
         <activity
-            android:name=".StartActivity"
+            android:name="unimelb.comp90018.saferdriver.StepthroughActivity"
             android:icon="@drawable/icon"
             android:label="SaferDriver"
             android:screenOrientation="fullSensor"
@@ -36,6 +37,9 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+
+        <activity android:name="unimelb.comp90018.saferdriver.StartActivity"
+                  android:screenOrientation="portrait"  />
         <activity android:name=".GooglyEyesActivity">
         </activity>
 
