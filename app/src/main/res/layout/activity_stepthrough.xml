@@ -24,13 +24,25 @@
                 android:id="@+id/walkthrough1"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:src="@drawable/startview_1"/>
+                android:src="@drawable/f3"/>
 
             <ImageView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:id="@+id/walkthrough2"
-                android:src="@drawable/mainview_2"/>
+                android:src="@drawable/f4_1"/>
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:id="@+id/walkthrough3"
+                android:src="@drawable/f2_1"/>
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:id="@+id/walkthrough4"
+                android:src="@drawable/f1_1"/>
 
         </ViewFlipper>
 
