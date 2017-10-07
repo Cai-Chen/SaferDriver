@@ -5,4 +5,4 @@ This app provides two main core functionalities:
    it can be recogizied as sleeping and send alarm voice.
 2. Road Information notification.
    Using Google Plances API to detect the location and send request to Azure to get road information, like speed limit or emergeny.
-   Than read the information to nofity the driver.
+   Then read the information to nofity the driver.
